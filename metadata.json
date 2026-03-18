@@ -1,0 +1,5 @@
+{
+  "name": "New Me Finder",
+  "description": "AI Makeup Simulator to discover your new look with various makeup styles.",
+  "requestFramePermissions": ["camera"]
+}
