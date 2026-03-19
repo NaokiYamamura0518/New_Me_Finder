@@ -29,17 +29,22 @@ export default function App() {
 
   // --- API Key Check ---
   useEffect(() => {
-    // In full-stack mode, we assume the server has the key.
-    // We'll just set hasKey to true to allow the user to proceed.
-    // If the key is missing, the server will return an error during generation.
-    setHasKey(true);
+    const checkKey = async () => {
+      if (window.aistudio?.hasSelectedApiKey) {
+        const selected = await window.aistudio.hasSelectedApiKey();
+        setHasKey(selected);
+      } else {
+        // Fallback for non-AI Studio environment
+        setHasKey(true);
+      }
+    };
+    checkKey();
   }, []);
 
   const handleOpenKeySelector = async () => {
-    // This is no longer needed in the same way for the end user,
-    // but we'll keep it for AI Studio environment compatibility if needed.
     if (window.aistudio?.openSelectKey) {
       await window.aistudio.openSelectKey();
+      setHasKey(true); // Assume success after opening
     }
   };
 
@@ -65,29 +70,64 @@ export default function App() {
     setError(null);
 
     try {
-      const response = await fetch('/api/generate-makeup', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          originalImage,
-          styleName: selectedStyle.name,
-          stylePrompt: selectedStyle.prompt,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '生成に失敗しました');
+      // Create a new GoogleGenAI instance right before making an API call
+      // to ensure it always uses the most up-to-date API key from the dialog.
+      const apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("APIキーが設定されていません。");
       }
 
-      const data = await response.json();
-      setGeneratedImage(data.imageUrl);
+      const ai = new GoogleGenAI({ apiKey });
+      
+      // Extract base64 data
+      const base64Data = originalImage.split(',')[1];
+      const mimeType = originalImage.split(';')[0].split(':')[1];
+
+      const prompt = `Apply a professional makeup transformation to this person's face based on the "${selectedStyle.name}" style. 
+      Specific instructions: ${selectedStyle.prompt}. 
+      Ensure the person's original facial structure and identity are preserved. 
+      The output should be a high-quality, realistic photo of the same person with the makeup applied. 
+      Subtly adjust facial lighting and skin texture to best suit the ${selectedStyle.name} aesthetic.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-image-preview",
+        contents: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Data,
+                mimeType: mimeType,
+              },
+            },
+            { text: prompt },
+          ],
+        },
+      });
+
+      let generatedImageUrl = null;
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          generatedImageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+
+      if (!generatedImageUrl) {
+        throw new Error("画像の生成に失敗しました。もう一度お試しください。");
+      }
+
+      setGeneratedImage(generatedImageUrl);
       setState('result');
     } catch (err: any) {
       console.error("Generation error:", err);
-      setError(err.message || "予期せぬエラーが発生しました。");
+      let message = err.message || "予期せぬエラーが発生しました。";
+      
+      if (message.includes("Requested entity was not found")) {
+        setHasKey(false);
+        message = "APIキーの有効期限が切れているか、無効です。再度選択してください。";
+      }
+      
+      setError(message);
       setState('selection');
     } finally {
       setIsGenerating(false);
@@ -348,6 +388,34 @@ export default function App() {
 
   return (
     <div className={`min-h-screen pb-12 transition-colors duration-500 ${state === 'home' ? 'bg-pink-50' : 'bg-[#fdfaf7]'}`}>
+      {/* API Key Selection Overlay */}
+      {!hasKey && (
+        <div className="fixed inset-0 z-[100] bg-white flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-20 h-20 bg-pink-100 rounded-full flex items-center justify-center text-pink-600 mb-6">
+            <Sparkles className="w-10 h-10" />
+          </div>
+          <h2 className="font-serif text-3xl mb-4">AIモデルの準備</h2>
+          <p className="text-gray-600 max-w-md mb-8">
+            高品質な画像生成を行うために、Gemini APIキーの選択が必要です。<br />
+            <a 
+              href="https://ai.google.dev/gemini-api/docs/billing" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-pink-600 underline"
+            >
+              課金設定済みのGoogle Cloudプロジェクト
+            </a>
+            のAPIキーを選択してください。
+          </p>
+          <button 
+            onClick={handleOpenKeySelector}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Check className="w-5 h-5" /> APIキーを選択して開始
+          </button>
+        </div>
+      )}
+
       <header className="p-4 md:p-6 flex items-center justify-between relative z-20">
         <div className={`font-serif text-xl tracking-tight cursor-pointer transition-colors ${state === 'home' ? 'text-pink-600' : ''}`} onClick={reset}>New Me Finder</div>
         <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors ${state === 'home' ? 'bg-pink-200 text-pink-600' : 'bg-[#d4a373]/10 text-[#d4a373]'}`}>
