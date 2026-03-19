@@ -56,4 +56,18 @@ export const MAKEUP_STYLES: MakeupStyle[] = [
     prompt: 'Apply a modern "Gal" (Gyaru) makeup look. Heavy false lashes, thick eyeliner, strong nose contouring and bronzer, and a glossy nude or pale pink lip. The look should be bold, expressive, and glamorous.',
     image: 'https://images.unsplash.com/photo-1609505848912-b7c3b8b4beda?auto=format&fit=crop&q=80&w=400',
   },
+  {
+    id: 'anime',
+    name: 'アニメ風',
+    description: '2次元キャラクターのような仕上がり',
+    prompt: 'Transform the person into a high-quality anime or manga style character. Large, expressive eyes with detailed highlights, stylized hair, and smooth, cel-shaded skin. Maintain the person\'s original facial features and identity but re-render them in a vibrant, artistic anime aesthetic. The background should also be subtly stylized to match the anime theme.',
+    image: 'https://images.unsplash.com/photo-1578632292335-df3abbb0d586?auto=format&fit=crop&q=80&w=400',
+  },
+  {
+    id: 'ghibli',
+    name: 'ジブリ風',
+    description: '温かみのある手描きアニメーション風',
+    prompt: 'Transform the person into a character in the style of Studio Ghibli. Soft, hand-drawn aesthetic with warm, natural colors. Simple but expressive facial features, gentle eyes, and a nostalgic, painterly feel. Maintain the person\'s original identity but re-render them as if they were a protagonist in a Ghibli masterpiece. The background should have a lush, detailed watercolor landscape feel.',
+    image: 'https://images.unsplash.com/photo-1492724441997-5dc865305da7?auto=format&fit=crop&q=80&w=400',
+  },
 ];

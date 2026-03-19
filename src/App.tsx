@@ -29,22 +29,17 @@ export default function App() {
 
   // --- API Key Check ---
   useEffect(() => {
-    const checkKey = async () => {
-      if (window.aistudio?.hasSelectedApiKey) {
-        const selected = await window.aistudio.hasSelectedApiKey();
-        setHasKey(selected);
-      } else {
-        // Fallback for dev environment where window.aistudio might not be present
-        setHasKey(!!process.env.GEMINI_API_KEY);
-      }
-    };
-    checkKey();
+    // In full-stack mode, we assume the server has the key.
+    // We'll just set hasKey to true to allow the user to proceed.
+    // If the key is missing, the server will return an error during generation.
+    setHasKey(true);
   }, []);
 
   const handleOpenKeySelector = async () => {
+    // This is no longer needed in the same way for the end user,
+    // but we'll keep it for AI Studio environment compatibility if needed.
     if (window.aistudio?.openSelectKey) {
       await window.aistudio.openSelectKey();
-      setHasKey(true);
     }
   };
 
@@ -61,8 +56,6 @@ export default function App() {
     }
   };
 
-  const triggerUpload = () => fileInputRef.current?.click();
-
   // --- AI Generation ---
   const generateMakeup = async () => {
     if (!originalImage || !selectedStyle) return;
@@ -72,63 +65,29 @@ export default function App() {
     setError(null);
 
     try {
-      let apiKey = '';
-      try {
-        // @ts-ignore
-        apiKey = process.env.API_KEY || process.env.GEMINI_API_KEY || '';
-      } catch (e) {
-        apiKey = process.env.GEMINI_API_KEY || '';
-      }
-      const ai = new GoogleGenAI({ apiKey });
-
-      // Extract base64 data
-      const base64Data = originalImage.split(',')[1];
-      const mimeType = originalImage.split(';')[0].split(':')[1];
-
-      const prompt = `Apply a professional makeup transformation to this person's face based on the "${selectedStyle.name}" style. 
-      Specific instructions: ${selectedStyle.prompt}. 
-      Ensure the person's original facial structure and identity are preserved. 
-      The output should be a high-quality, realistic photo of the same person with the makeup applied. 
-      Subtly adjust facial lighting and skin texture to best suit the ${selectedStyle.name} aesthetic.`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-flash-image-preview",
-        contents: {
-          parts: [
-            {
-              inlineData: {
-                data: base64Data,
-                mimeType: mimeType,
-              },
-            },
-            { text: prompt },
-          ],
+      const response = await fetch('/api/generate-makeup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        config: {
-          imageConfig: {
-            aspectRatio: "1:1",
-            imageSize: "1K"
-          }
-        }
+        body: JSON.stringify({
+          originalImage,
+          styleName: selectedStyle.name,
+          stylePrompt: selectedStyle.prompt,
+        }),
       });
 
-      let foundImage = false;
-      for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-          setGeneratedImage(`data:image/png;base64,${part.inlineData.data}`);
-          foundImage = true;
-          break;
-        }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || '生成に失敗しました');
       }
 
-      if (!foundImage) {
-        throw new Error("AI did not return an image. Please try again.");
-      }
-
+      const data = await response.json();
+      setGeneratedImage(data.imageUrl);
       setState('result');
     } catch (err: any) {
       console.error("Generation error:", err);
-      setError(err.message || "An error occurred during generation.");
+      setError(err.message || "予期せぬエラーが発生しました。");
       setState('selection');
     } finally {
       setIsGenerating(false);
@@ -250,22 +209,23 @@ export default function App() {
       className="flex flex-col items-center justify-center min-h-[80vh] px-4 md:px-6"
     >
       <h2 className="font-serif text-3xl mb-8">写真をアップロード</h2>
-      <div 
-        onClick={triggerUpload}
-        className="w-full max-w-sm aspect-square border-2 border-dashed border-gray-300 rounded-3xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-[#d4a373] hover:bg-[#fdfaf7] transition-all"
+      <label 
+        htmlFor="file-upload"
+        className="relative w-full max-w-sm aspect-square border-2 border-dashed border-gray-300 rounded-3xl flex flex-col items-center justify-center gap-4 cursor-pointer hover:border-[#d4a373] hover:bg-[#fdfaf7] transition-all"
       >
         <div className="w-16 h-16 bg-white rounded-full shadow-md flex items-center justify-center text-gray-400">
           <Camera className="w-8 h-8" />
         </div>
         <p className="text-gray-500 font-medium">カメラを起動 または ファイルを選択</p>
         <input 
+          id="file-upload"
           type="file" 
           ref={fileInputRef} 
           onChange={handleFileChange} 
           accept="image/*" 
-          className="hidden" 
+          className="absolute inset-0 opacity-0 cursor-pointer" 
         />
-      </div>
+      </label>
       <button onClick={() => setState('home')} className="mt-8 text-gray-500 underline">戻る</button>
     </motion.div>
   );
